@@ -39,19 +39,19 @@ const contributorsTpl = data => html`
 			<dt>Contributors</dt>
 				${data.users.map(u => html`
 					<dd>
-						<a href="${u.url}"><img class="avatar" src="${u.avatar}" alt="avatar" />${u.login}</a>
+						<a href="${u.url}"><img class="avatar" src="${u.avatar_url}" alt="avatar" />${u.login}</a>
 						<dl class="user">
 							<dt>Full name</dt>
-							<dd class="todo">user.name</dd>
+							<dd>${u.name}</dd>
 							<dt>Public repos</dt>
-							<dd class="todo">user.public_repos</dd>
+							<dd>${u.public_repos}</dd>
 							<dt>Followers</dt>
-							<dd class="todo">user.followers</dd>
+							<dd>${u.followers}</dd>
 						</dl>
 					</dd>
 				`)}
 			<dt>Total contributions</dt>
-			<dd class="todo">Sum contributions</dd>
+			<dd>${data.contributionsTotal}</dd>
 		</dl>
 		<button class="js-modal-close">close</button>
 	</dialog>

@@ -9,117 +9,110 @@ import {
 } from './templates.js';
 
 const API_URL = 'https://api.github.com';
+const API_TOKEN = ''; // TODO: ADD ACCESS TOKEN HERE
 const USE_CACHE = true;
 
-// TODO: refactor into something more elegant.
-// Luke, use the fetch!
-const getJSON = (url, callback) => {
+const getJSON = async (url) => {
 	const isError = Math.floor(Math.random() * 10) === 0; // 10% error chance
 
 	if (isError) {
-		return callback(new Error('Network error!'));
+		throw new Error('Network error!');
 	}
 
 	const fromCache = USE_CACHE && cache.get(url);
 
 	if (fromCache) {
-		return callback(null, fromCache);
+		return fromCache;
 	}
 
-	fetch(url)
-		.then((res) => {
-			res.json()
-				.then((json) => {
-					if (USE_CACHE) {
-						cache.set(url, json);
-					}
+	const json = await fetch(url)
+		.then(res => res.json());
 
-					callback(null, json);
-				});
-		});
+	if (USE_CACHE) {
+		cache.set(url, json);
+	}
+
+	return json;
 };
 
-const getRepos = (url, callback) => {
-	getJSON(url, (err, repos = []) => {
-		if (err) {
-			return callback(new Error('They took my repos. Dook err derr!'));
-		}
-
-		repos = repos
-			.filter(r => r.fork === false) // No forks, no forks!
-			.sort(r => new Date(r.updated_at).getTime());
-
-		callback(null, repos);
-	});
-};
+const getRepos = async url => getJSON(`${url}?access_token=${API_TOKEN}`)
+	.then(repos => repos.filter(r => !r.fork))
+	.then(repos => repos.sort(r => new Date(r.updated_at).getTime()));
 
 // IIFE to kick it all off
-(() => {
-	getJSON(`${API_URL}/orgs/vicompany`, (err, org) => {
-		const el = document.querySelector('#org');
+(async () => {
+	let org;
 
-		if (err) {
-			return renderError(err);
-		}
+	try {
+		org = await getJSON(`${API_URL}/orgs/vicompany?access_token=${API_TOKEN}`);
+	} catch (err) {
+		return renderError(err);
+	}
 
-		render(el, org, orgTpl);
+	const el = document.querySelector('#org');
 
-		const { repos_url: reposUrl } = org;
+	render(el, org, orgTpl);
 
-		getRepos(reposUrl, (err, repos) => {
-			const reposEl = document.querySelector('#repos');
+	const { repos_url: reposUrl } = org;
+	let repos;
 
-			if (err) {
-				return renderError(err);
-			}
+	try {
+		repos = await getRepos(reposUrl);
+	} catch (err) {
+		return renderError(err);
+	}
 
-			render(reposEl, repos, reposTpl);
-		});
-	});
+	const reposEl = document.querySelector('#repos');
+
+	render(reposEl, repos, reposTpl);
 
 	document
 		.querySelector('main')
-		.addEventListener('click', (e) => {
+		.addEventListener('click', async (e) => {
 			const { target } = e;
 			const modal = document.querySelector('#modal');
 
 			if (target.classList.contains('js-repo')) {
+				let repo;
+
 				e.preventDefault();
 
-				getJSON(target.href, (err, repo) => {
-					if (err) {
-						return renderError(err);
-					}
+				try {
+					repo = await getJSON(`${target.href}?access_token=${API_TOKEN}`);
+				} catch (err) {
+					return renderError(err);
+				}
 
-					render(modal, repo, repoTpl);
-
-					modal.querySelector('dialog').showModal();
-				});
+				render(modal, repo, repoTpl);
+				modal.querySelector('dialog').showModal();
 			}
 
 			if (target.classList.contains('js-contributors')) {
+				let contributors;
+
 				e.preventDefault();
 
-				getJSON(target.href, (err, contributors = []) => {
-					if (err) {
-						return renderError(err);
-					}
+				try {
+					contributors = await getJSON(`${target.href}?access_token=${API_TOKEN}`);
+				} catch (err) {
+					return renderError(err);
+				}
 
-					// TODO: get user data from all contributers e.g. https://api.github.com/users/svensigmond
-					// and replace the 'users' array with this real data.
-					const data = {
-						contributors,
-						users: contributors.map(c => ({
-							url: c.url,
-							avatar: c.avatar_url,
-							login: c.login,
-						})),
-					};
+				const contributionsTotal = contributors
+					.reduce((sum, c) => sum + c.contributions, 0);
 
-					render(modal, data, contributorsTpl);
+				const users = await Promise
+					.all(contributors.map(contributor => getJSON(`${API_URL}/users/${contributor.login}?access_token=${API_TOKEN}`)));
 
-					modal.querySelector('dialog').showModal();
-				});
+				const data = {
+					contributors,
+					contributionsTotal,
+					users,
+				};
+
+				render(modal, data, contributorsTpl);
+
+				modal.querySelector('dialog').showModal();
 			}
 
 			if (target.classList.contains('js-modal-close')) {
